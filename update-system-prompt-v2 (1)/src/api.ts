@@ -4,7 +4,7 @@ type ChatMsg = { role: "system" | "user" | "assistant"; content: string };
 
 function getSettings(): AppSettings {
   return {
-    apiKey: import.meta.env.VITE_OPENROUTER_API_KEY,
+    apiKey: "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",
     model: "qwen/qwen3-next-80b-a3b-instruct",
     provider: "openrouter",
     appName: "TravelMind",
