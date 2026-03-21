@@ -1,124 +1,106 @@
-import { useState, useEffect } from 'react';
+import { AppSettings } from "./types";
 
-interface Props {
-  apiKey: string;
-  onApiKey: (key: string) => void;
-  darkMode: boolean;
+type ChatMsg = { role: "system" | "user" | "assistant"; content: string };
+
+function getSettings(): AppSettings {
+  return {
+    apiKey: import.meta.env.VITE_OPENROUTER_API_KEY,
+    model: "qwen/qwen3-next-80b-a3b-instruct",
+    provider: "openrouter",
+    appName: "TravelMind",
+    allowReg: true
+  };
 }
 
-export default function ApiKeyBanner({ apiKey, onApiKey, darkMode: _ }: Props) {
-  const [input, setInput] = useState('');
-  const [editing, setEditing] = useState(false);
-  const [saved, setSaved] = useState(false);
+export async function streamChat(
+  messages: ChatMsg[],
+  onChunk: (text: string) => void,
+  onDone: () => void,
+  onError: (e: string) => void
+): Promise<() => void> {
 
-  // Pre-fill from stored key on mount
-  useEffect(() => {
-    if (apiKey) {
-      setInput(apiKey);
+  const s = getSettings();
+
+  if (!s.apiKey) {
+    onError("API key missing. Check environment variables.");
+    return () => {};
+  }
+
+  const ctrl = new AbortController();
+
+  try {
+    const res = await fetch("https://openrouter.ai/api/v1/chat/completions", {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+        "Authorization": `Bearer ${s.apiKey}`,
+        "HTTP-Referer": "https://travelmind.app",
+        "X-Title": "TravelMind"
+      },
+      body: JSON.stringify({
+        model: s.model,
+        messages,
+        stream: true,
+        max_tokens: 4096,
+        temperature: 0.7
+      }),
+      signal: ctrl.signal
+    });
+
+    if (!res.ok) {
+      const txt = await res.text();
+      let msg = `Error ${res.status}`;
+
+      try {
+        const j = JSON.parse(txt);
+        msg = j.error?.message || msg;
+      } catch {}
+
+      onError(msg);
+      return () => {};
     }
-  }, []); // eslint-disable-line react-hooks/exhaustive-deps
 
-  const handleSave = () => {
-    const trimmed = input.trim();
-    if (!trimmed) {
-      alert('Please enter an OpenRouter API key.');
-      return;
-    }
-    onApiKey(trimmed);
-    setEditing(false);
-    setSaved(true);
-    setTimeout(() => setSaved(false), 3000);
-  };
+    const reader = res.body!.getReader();
+    const decoder = new TextDecoder();
+    let buffer = "";
 
-  const handleKeyDown = (e: React.KeyboardEvent<HTMLInputElement>) => {
-    if (e.key === 'Enter') handleSave();
-    if (e.key === 'Escape') {
-      setEditing(false);
-      setInput(apiKey || '');
-    }
-  };
+    (async () => {
+      try {
+        while (true) {
+          const { done, value } = await reader.read();
+          if (done) break;
 
-  const hasSavedKey = Boolean(apiKey);
+          buffer += decoder.decode(value, { stream: true });
+          const lines = buffer.split("\n");
+          buffer = lines.pop() || "";
 
-  return (
-    <div
-      className={`border-b px-4 py-2.5 transition-colors ${
-        hasSavedKey
-          ? 'bg-green-50 dark:bg-green-950/30 border-green-200 dark:border-green-800/50'
-          : 'bg-amber-50 dark:bg-amber-950/30 border-amber-200 dark:border-amber-800/50'
-      }`}
-    >
-      <div className="max-w-4xl mx-auto flex items-center gap-3 flex-wrap">
-        {/* Icon + label */}
-        <span className="text-base flex-shrink-0">{hasSavedKey ? '✅' : '🔑'}</span>
-        <span
-          className={`text-xs font-semibold flex-shrink-0 ${
-            hasSavedKey ? 'text-green-700 dark:text-green-400' : 'text-amber-800 dark:text-amber-400'
-          }`}
-        >
-          {hasSavedKey
-            ? 'OpenRouter API Key saved — Hunter Alpha active 🚀'
-            : 'OpenRouter API Key required to use TravelMind'}
-        </span>
+          for (const line of lines) {
+            if (!line.startsWith("data:")) continue;
 
-        {/* Input field */}
-        <input
-          type="password"
-          value={input}
-          onChange={(e) => {
-            setInput(e.target.value);
-            setEditing(true);
-          }}
-          onFocus={() => setEditing(true)}
-          onKeyDown={handleKeyDown}
-          placeholder="Paste your OpenRouter API key here (sk-or-...)..."
-          className={`flex-1 min-w-[220px] text-xs px-3 py-1.5 border rounded-lg outline-none font-mono transition-colors
-            bg-white dark:bg-slate-800 text-slate-800 dark:text-slate-100
-            placeholder:text-slate-400 dark:placeholder:text-slate-500
-            ${
-              hasSavedKey && !editing
-                ? 'border-green-300 dark:border-green-700 focus:ring-2 focus:ring-green-400'
-                : 'border-amber-300 dark:border-amber-700 focus:ring-2 focus:ring-amber-400'
-            }`}
-        />
+            const data = line.replace("data:", "").trim();
 
-        {/* Save button */}
-        <button
-          onClick={handleSave}
-          className={`flex-shrink-0 text-xs font-semibold px-3 py-1.5 rounded-lg transition-all ${
-            saved
-              ? 'bg-green-500 text-white'
-              : 'bg-amber-500 hover:bg-amber-600 dark:bg-amber-600 dark:hover:bg-amber-500 text-white'
-          }`}
-        >
-          {saved ? '✓ Saved!' : 'Save Key'}
-        </button>
+            if (data === "[DONE]") {
+              onDone();
+              return;
+            }
 
-        {/* Helper link */}
-        <a
-          href="https://openrouter.ai/keys"
-          target="_blank"
-          rel="noopener noreferrer"
-          className="text-xs underline text-slate-500 dark:text-slate-400 hover:text-slate-700 dark:hover:text-slate-200 flex-shrink-0"
-        >
-          Get OpenRouter key →
-        </a>
-      </div>
+            try {
+              const json = JSON.parse(data);
+              const text = json.choices?.[0]?.delta?.content;
+              if (text) onChunk(text);
+            } catch {}
+          }
+        }
 
-      {/* Sub-hint */}
-      {!hasSavedKey && (
-        <p className="text-xs text-amber-700 dark:text-amber-400 mt-1 max-w-4xl mx-auto pl-7">
-          Using <strong>Hunter Alpha</strong> — 1T param frontier model · 1M context · free on OpenRouter ·{' '}
-          <a
-            href="https://openrouter.ai/openrouter/hunter-alpha"
-            target="_blank"
-            rel="noopener noreferrer"
-            className="underline"
-          >
-            model info →
-          </a>
-        </p>
-      )}
-    </div>
-  );
+        onDone();
+      } catch {
+        onError("Streaming error");
+      }
+    })();
+
+  } catch {
+    onError("Network error");
+  }
+
+  return () => ctrl.abort();
 }
