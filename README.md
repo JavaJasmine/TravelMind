@@ -206,3 +206,8 @@ CREATE TABLE sessions_log (
 - React / Node.js
 - FastAPI
 - OpenWeather API
+
+## 🌟 Future Scope
+- AR-based historical visualization
+- Advanced AI personalization
+
