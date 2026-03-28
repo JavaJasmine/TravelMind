@@ -211,3 +211,8 @@ CREATE TABLE sessions_log (
 - AR-based historical visualization
 - Advanced AI personalization
 
+## ⚙️ Tech Stack
+- Frontend: React / HTML / CSS
+- Backend: Node.js / FastAPI
+- APIs: Google Maps, Weather API
+- Database: Firebase / PostgreSQL
