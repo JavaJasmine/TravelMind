@@ -193,3 +193,10 @@ CREATE TABLE sessions_log (
   created_at DATETIME DEFAULT CURRENT_TIMESTAMP
 );
 ```
+
+---
+
+## 👨‍💻 Contribution
+
+- Improved documentation and UI
+- Enhanced system understanding and features
