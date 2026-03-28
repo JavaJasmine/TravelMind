@@ -197,6 +197,12 @@ CREATE TABLE sessions_log (
 ---
 
 ## 👨‍💻 Contribution
+## 🚀 Features
+- Smart route optimization
+- AI-based storytelling
+- Weather-based dynamic replanning
 
-- Improved documentation and UI
-- Enhanced system understanding and features
+## ⚙️ Tech Stack
+- React / Node.js
+- FastAPI
+- OpenWeather API
